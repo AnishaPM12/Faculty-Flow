@@ -1,0 +1,127 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isFacultyOrAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.role == 'faculty' || 
+        request.auth.token.role == 'admin' ||
+        exists(/databases/$(database)/documents/faculty_profiles/$(request.auth.uid))
+      );
+    }
+
+    // User authentication details
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // Faculty Profiles
+    match /faculty_profiles/{facultyId} {
+      allow read: if isAuthenticated();
+      allow write: if isOwner(facultyId);
+    }
+
+    // Timetable Entries: All faculty can view department timetable, only owner or admin can edit
+    match /timetable/{entryId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAuthenticated() && (
+        resource == null || resource.data.facultyId == request.auth.uid
+      );
+    }
+
+    // Portal Tasks (Attendance, Internal Marks Upload, Lesson Plans)
+    match /tasks/{taskId} {
+      allow read, write: if isAuthenticated() && (
+        resource == null || resource.data.facultyId == request.auth.uid
+      );
+    }
+
+    // Assignments & Deadlines
+    match /assignments/{assignmentId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (
+        resource == null || resource.data.facultyId == request.auth.uid
+      );
+    }
+
+    // Mark Corrections: HIGH SECURITY AUDIT COLLECTION
+    // Once created, corrections cannot be deleted (immutable audit trail)
+    match /mark_corrections/{correctionId} {
+      allow read: if isAuthenticated() && (
+        resource.data.facultyId == request.auth.uid || 
+        request.auth.token.role == 'admin' ||
+        request.auth.token.role == 'hod'
+      );
+      allow create: if isAuthenticated() && 
+        request.resource.data.facultyId == request.auth.uid &&
+        request.resource.data.confirmed == true;
+      allow update: if isAuthenticated() && 
+        (resource.data.facultyId == request.auth.uid || request.auth.token.role == 'admin');
+      // Deletions are forbidden to preserve institutional grade integrity
+      allow delete: if false;
+    }
+
+    // Faculty Substitution Requests
+    match /substitutions/{subId} {
+      allow read: if isAuthenticated();
+      // Only requester or target substitute faculty can update (accept/reject)
+      allow create: if isAuthenticated() && request.resource.data.requesterFacultyId == request.auth.uid;
+      allow update: if isAuthenticated() && (
+        resource.data.requesterFacultyId == request.auth.uid || 
+        resource.data.substituteFacultyId == request.auth.uid
+      );
+      allow delete: if isAuthenticated() && resource.data.requesterFacultyId == request.auth.uid;
+    }
+
+    // Academic Events, Meetings & Expenses
+    match /events/{eventId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (
+        resource == null || resource.data.organizerId == request.auth.uid
+      );
+    }
+
+    match /meetings/{meetingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    match /expenses/{expenseId} {
+      allow read, write: if isAuthenticated() && (
+        resource == null || resource.data.recordedBy == request.auth.uid
+      );
+    }
+
+    // Daily Planner & Notes ("My Day")
+    match /daily_plans/{planId} {
+      allow read, write: if isAuthenticated() && (
+        resource == null || resource.data.facultyId == request.auth.uid
+      );
+    }
+
+    // Smart Reminders
+    match /reminders/{reminderId} {
+      allow read, write: if isAuthenticated() && (
+        resource == null || resource.data.facultyId == request.auth.uid
+      );
+    }
+
+    // Notifications
+    match /notifications/{notificationId} {
+      allow read, update: if isAuthenticated() && (
+        resource.data.recipientId == request.auth.uid
+      );
+      allow create: if isAuthenticated();
+      allow delete: if isAuthenticated() && resource.data.recipientId == request.auth.uid;
+    }
+  }
+}

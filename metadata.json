@@ -1,0 +1,7 @@
+{
+  "name": "FacultyFlow – Smart Faculty Academic Assistant",
+  "description": "Comprehensive academic assistant for college faculty to manage schedules, portal tasks, mark corrections, substitutions, smart reminders, and AI productivity.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
